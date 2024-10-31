@@ -925,6 +925,12 @@ redupe_correct_read(struct redupe_correct_file* in, unsigned char* buf, size_t b
             in->offset = 0;
             unsigned char header[256];
             gather(in->chunk, header, BLOCK_SIZE - 1);
+
+            if (redupe_correct_msg(header, HEADER_SIZE, 255 - HEADER_SIZE, header + HEADER_SIZE) < 0)
+            {
+                return -1;
+            }
+
             unsigned long long chunk_amt;
             parse_header(header, &chunk_amt, &in->msg_sz, &in->code_sz);
             in->chunk_amt = chunk_amt;
