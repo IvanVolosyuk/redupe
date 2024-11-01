@@ -40,7 +40,7 @@
 #include <popt.h>
 
 /* redupe */
-#include <redupe.h>
+#include "redupe.h"
 
 #define BUF_SIZE 4096
 
