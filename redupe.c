@@ -117,7 +117,7 @@ redupe_gf_mul(unsigned x, unsigned y)
         return 0;
     }
 
-    return gf_exp[(gf_log[x] + gf_log[y]) % 255];
+    return gf_exp[gf_log[x] + gf_log[y]];
 }
 
 unsigned
