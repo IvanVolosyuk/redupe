@@ -566,10 +566,18 @@ redupe_correct_errata(unsigned char* msg, unsigned msg_sz,
 }
 
 REDUPE_API int
-redupe_correct_msg(unsigned char* msg, unsigned msg_sz,
+redupe_correct_msg(LogGeneratorPolys generator_polys,
+                   unsigned char* msg, unsigned msg_sz,
                    unsigned nsym, unsigned char* code)
 {
     assert(msg_sz + nsym < 256);
+
+    uint8_t recomputed_code[256];
+    redupe_encode_msg(generator_polys, msg, msg_sz, nsym, recomputed_code);
+    if (memcmp(recomputed_code, code, nsym) == 0) {
+        return 0;
+    }
+
     unsigned char buf[256];
     const unsigned buf_sz = msg_sz + nsym;
     unsigned char synd[256];
@@ -854,6 +862,7 @@ struct redupe_correct_file
     unsigned chunk_amt;
     unsigned offset;
     unsigned char chunk[CHUNK_SIZE];
+    LogGeneratorPolys generator_polys;
 };
 
 REDUPE_API struct redupe_correct_file*
@@ -893,6 +902,7 @@ redupe_correct_from_file(FILE* in)
     ret->code_sz = 0;
     ret->chunk_idx = BLOCK_SIZE - 1;
     ret->chunk_amt = CHUNK_SIZE;
+    redupe_generator_polys(ret->generator_polys);
     return ret;
 }
 
@@ -922,7 +932,8 @@ redupe_correct_read(struct redupe_correct_file* in, unsigned char* buf, size_t b
             unsigned char header[256];
             gather(in->chunk, header, BLOCK_SIZE - 1);
 
-            if (redupe_correct_msg(header, HEADER_SIZE, 255 - HEADER_SIZE, header + HEADER_SIZE) < 0)
+            if (redupe_correct_msg(in->generator_polys, header, HEADER_SIZE,
+                                   255 - HEADER_SIZE, header + HEADER_SIZE) < 0)
             {
                 return -1;
             }
@@ -951,7 +962,7 @@ redupe_correct_read(struct redupe_correct_file* in, unsigned char* buf, size_t b
         gather(in->chunk, tmp, in->chunk_idx);
         const unsigned this_msg_sz = chunk_start + in->msg_sz <= in->chunk_amt ? in->msg_sz : in->chunk_amt - chunk_start;
 
-        if (redupe_correct_msg(tmp, this_msg_sz, in->code_sz, tmp + in->msg_sz) < 0)
+        if (redupe_correct_msg(in->generator_polys, tmp, this_msg_sz, in->code_sz, tmp + in->msg_sz) < 0)
         {
             return -1;
         }
@@ -1140,6 +1151,9 @@ fecsum_correct(const char* file, const char* fec, const char* corrected)
         return -1;
     }
 
+    LogGeneratorPolys generator_polys;
+    redupe_generator_polys(generator_polys);
+
     unsigned long long file_size;
     unsigned msg_sz;
     unsigned code_sz;
@@ -1200,7 +1214,7 @@ fecsum_correct(const char* file, const char* fec, const char* corrected)
                     goto fecsum_correct_error;
                 }
 
-                if (redupe_correct_msg(tmp, sz, code_sz, code) < 0)
+                if (redupe_correct_msg(generator_polys, tmp, sz, code_sz, code) < 0)
                 {
                     goto fecsum_correct_error;
                 }

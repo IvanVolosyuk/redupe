@@ -62,7 +62,8 @@ typedef uint8_t LogGeneratorPolys[256][256];
 void redupe_encode_msg(LogGeneratorPolys generator_polys,
                        const unsigned char* msg, unsigned msg_sz,
                        unsigned nsym, unsigned char* code);
-int redupe_correct_msg(unsigned char* msg, unsigned msg_sz,
+int redupe_correct_msg(LogGeneratorPolys generator_polys,
+                       unsigned char* msg, unsigned msg_sz,
                        unsigned nsym, unsigned char* code);
 
 #ifdef __cplusplus

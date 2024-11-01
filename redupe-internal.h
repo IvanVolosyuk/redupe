@@ -28,6 +28,7 @@
 #ifndef redupe_internal_h_
 #define redupe_internal_h_
 
+#include "redupe.h"
 #ifdef __cplusplus
 extern "C"
 {
@@ -68,7 +69,8 @@ void redupe_find_error_evaluator(const unsigned char* synd, unsigned synd_sz,
 void redupe_correct_errata(unsigned char* msg, unsigned msg_sz,
                            const unsigned char* synd, unsigned synd_sz,
                            const unsigned char* err_pos, unsigned err_pos_sz);
-int redupe_correct_msg(unsigned char* msg, unsigned msg_sz,
+int redupe_correct_msg(LogGeneratorPolys generator_polys,
+                       unsigned char* msg, unsigned msg_sz,
                        unsigned nsym, unsigned char* code);
 
 #ifdef __cplusplus
