@@ -29,6 +29,7 @@
 #define redupe_h_
 
 /* C */
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -55,8 +56,11 @@ int fecsum_create(const char* file, const char* fecsum, unsigned nsym);
 int fecsum_check(const char* file, const char* fecsum);
 int fecsum_correct(const char* file, const char* fecsum, const char* corrected);
 
+typedef uint8_t LogGeneratorPolys[256][256];
+
 /* low level routines */
-void redupe_encode_msg(const unsigned char* msg, unsigned msg_sz,
+void redupe_encode_msg(LogGeneratorPolys generator_polys,
+                       const unsigned char* msg, unsigned msg_sz,
                        unsigned nsym, unsigned char* code);
 int redupe_correct_msg(unsigned char* msg, unsigned msg_sz,
                        unsigned nsym, unsigned char* code);

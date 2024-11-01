@@ -32,6 +32,7 @@
 
 /* C */
 #include <assert.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -255,63 +256,50 @@ redupe_gf_poly_eval(const unsigned char* poly, unsigned poly_sz, unsigned x)
 }
 
 void
-redupe_generator_poly(unsigned nsym, unsigned char* gen)
+redupe_generator_polys(LogGeneratorPolys polys)
 {
-    assert(nsym > 0);
-    unsigned char poly1[256];
-    unsigned char poly2[256];
-    unsigned char tmp[2];
-    unsigned poly1_sz = 1;
-    unsigned poly2_sz = 0;
-    poly1[0] = 1;
+    memset(polys, 0, sizeof(LogGeneratorPolys));
 
-    for (unsigned i = 0; i < nsym; ++i)
+    uint32_t prev_poly_sz, poly_sz;
+
+    uint8_t multiplier_poly[2];
+    uint32_t multiplier_poly_sz = 2;
+
+    multiplier_poly[0] = 1;
+    multiplier_poly[1] = redupe_gf_pow(GENERATOR, 0);
+
+    polys[0][0] = 1;
+    prev_poly_sz = 1;
+
+    for (int i = 1; i < 256; ++i)
     {
-        if ((i & 0x1) == 0)
-        {
-            tmp[0] = 1;
-            tmp[1] = redupe_gf_pow(GENERATOR, i);
-            redupe_gf_poly_mul(poly1, poly1_sz, tmp, GENERATOR, poly2, &poly2_sz);
-        }
-        else
-        {
-            tmp[0] = 1;
-            tmp[1] = redupe_gf_pow(GENERATOR, i);
-            redupe_gf_poly_mul(poly2, poly2_sz, tmp, GENERATOR, poly1, &poly1_sz);
-        }
+        // The table shifted a bit
+        multiplier_poly[1] = redupe_gf_pow(GENERATOR, i-1);
+        redupe_gf_poly_mul(polys[i-1], prev_poly_sz,
+                           multiplier_poly, multiplier_poly_sz, polys[i], &poly_sz);
+        assert(poly_sz == i + 1);
+        prev_poly_sz = poly_sz;
     }
 
-    if ((nsym & 0x1))
+    for (int i = 0; i < 256; ++i)
     {
-        memmove(gen, poly2, poly2_sz * sizeof(unsigned char));
-        assert(nsym + 1 == poly2_sz);
-    }
-    else
-    {
-        memmove(gen, poly1, poly1_sz * sizeof(unsigned char));
-        assert(nsym + 1 == poly1_sz);
+         for(int j = 0; j < i + 1; j++) {
+           polys[i][j] = gf_log[polys[i][j]];
+         }
     }
 }
 
 REDUPE_API void
-redupe_encode_msg(const unsigned char* msg, unsigned msg_sz,
+redupe_encode_msg(LogGeneratorPolys generator_polys, const unsigned char* msg, unsigned msg_sz,
                   unsigned nsym, unsigned char* code)
 {
     assert(msg_sz + nsym < 256);
-    unsigned char generator[256];
-    unsigned char logs[256];
     unsigned char out[256];
 
-    memset(generator, 0, sizeof(generator));
-    memset(logs, 0, sizeof(logs));
     memset(out, 0, sizeof(out));
     memmove(out, msg, msg_sz);
-    redupe_generator_poly(nsym, generator);
 
-    for (unsigned i = 0; i < nsym + 1; ++i)
-    {
-        logs[i] = gf_log[generator[i]];
-    }
+    uint8_t* logs = generator_polys[nsym];
 
     for (unsigned i = 0; i < msg_sz; ++i)
     {
@@ -723,6 +711,7 @@ struct redupe_encode_file
     unsigned buf_sz;
     unsigned char chunk[CHUNK_SIZE];
     unsigned char buf[255];
+    LogGeneratorPolys generator_polys;
 };
 
 REDUPE_API struct redupe_encode_file*
@@ -762,6 +751,7 @@ redupe_encode_from_file(FILE* out, unsigned nsym)
     ret->chunk_idx = 0;
     ret->chunk_amt = 0;
     ret->buf_sz = 0;
+    redupe_generator_polys(ret->generator_polys);
     return ret;
 }
 
@@ -788,7 +778,7 @@ redupe_encode_write(struct redupe_encode_file* out, const unsigned char* buf, si
             continue;
         }
 
-        redupe_encode_msg(out->buf, msg_sz, out->nsym, out->buf + msg_sz);
+        redupe_encode_msg(out->generator_polys, out->buf, msg_sz, out->nsym, out->buf + msg_sz);
         scatter(out->chunk, out->buf, out->chunk_idx);
         ++out->chunk_idx;
         out->chunk_amt += msg_sz;
@@ -803,7 +793,8 @@ redupe_encode_write(struct redupe_encode_file* out, const unsigned char* buf, si
         unsigned char header[256];
         memset(header, 0, sizeof(header));
         create_header(out->chunk_amt, msg_sz, out->nsym, header);
-        redupe_encode_msg(header, HEADER_SIZE, 255 - HEADER_SIZE, header + HEADER_SIZE);
+        redupe_encode_msg(out->generator_polys, header, HEADER_SIZE, 255 - HEADER_SIZE,
+                          header + HEADER_SIZE);
         scatter(out->chunk, header, BLOCK_SIZE - 1);
 
         if (fwrite(out->chunk, 1, CHUNK_SIZE, out->out) != CHUNK_SIZE)
@@ -824,7 +815,7 @@ redupe_encode_close(struct redupe_encode_file* out)
 {
     const unsigned msg_sz = 255 - out->nsym;
     memset(out->buf + out->buf_sz, 0, 255 - out->buf_sz);
-    redupe_encode_msg(out->buf, out->buf_sz, out->nsym, out->buf + msg_sz);
+    redupe_encode_msg(out->generator_polys, out->buf, out->buf_sz, out->nsym, out->buf + msg_sz);
     scatter(out->chunk, out->buf, out->chunk_idx);
     unsigned char header[256];
     memset(header, 0, sizeof(header));
@@ -835,7 +826,8 @@ redupe_encode_close(struct redupe_encode_file* out)
     }
 
     create_header(out->chunk_amt + out->buf_sz, msg_sz, out->nsym, header);
-    redupe_encode_msg(header, HEADER_SIZE, 255 - HEADER_SIZE, header + HEADER_SIZE);
+    redupe_encode_msg(out->generator_polys, header, HEADER_SIZE,
+                      255 - HEADER_SIZE, header + HEADER_SIZE);
     scatter(out->chunk, header, BLOCK_SIZE - 1);
     int ret = 0;
 
@@ -1006,6 +998,9 @@ fecsum_create(const char* file, const char* fec, unsigned nsym)
     assert(msg_sz <= 255);
     assert(code_sz < 255);
     FILE* input = fopen(file, "r");
+    LogGeneratorPolys generator_polys;
+    redupe_generator_polys(generator_polys);
+
 
     if (!input)
     {
@@ -1070,7 +1065,7 @@ fecsum_create(const char* file, const char* fec, unsigned nsym)
                 const unsigned sz = outbuf_sz < msg_sz ? outbuf_sz : msg_sz;
                 unsigned char code[256];
                 memset(code, 0, sizeof(code));
-                redupe_encode_msg(outbuf, sz, code_sz, code);
+                redupe_encode_msg(generator_polys, outbuf, sz, code_sz, code);
 
                 if (redupe_encode_write(output, code, code_sz) != code_sz)
                 {
