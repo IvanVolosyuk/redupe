@@ -32,6 +32,7 @@
 
 /* C */
 #include <assert.h>
+#include <stdio.h>
 #include <string.h>
 
 /* POSIX */
@@ -566,6 +567,9 @@ redupe_correct_errata(unsigned char* msg, unsigned msg_sz,
         unsigned char y = redupe_gf_poly_eval(tmp, tmp_sz, xinv);
         y = redupe_gf_mul(redupe_gf_pow(X[i], 1), y);
         E[err_pos[i]] = redupe_gf_div(y, err_loc_prime);
+        if (E[err_pos[i]] != 0) {
+            fprintf(stderr, "Error at %d offset\n", err_pos[i]);
+        }
     }
 
     tmp_sz = msg_sz;
